@@ -1,0 +1,23 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: weather-map-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: weather-map-frontend
+    depends_on:
+      - backend
+    environment:
+      BACKEND_BASE_URL: http://backend:8000
+    ports:
+      - "8501:8501"
+

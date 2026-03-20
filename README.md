@@ -17,6 +17,16 @@ uv run uvicorn backend.main:app --reload
 uv run streamlit run frontend/app.py
 ```
 
+## Docker
+
+```bash
+docker compose up --build
+```
+
+- Frontend: http://localhost:8501
+- Backend: http://localhost:8000
+- Swagger: http://localhost:8000/docs
+
 ## Structure
 
 ```text
