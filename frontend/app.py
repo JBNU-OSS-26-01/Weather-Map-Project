@@ -1,4 +1,5 @@
 import os
+import time
 
 import pandas as pd
 import pydeck as pdk
@@ -21,12 +22,15 @@ def init_state() -> None:
     st.session_state.setdefault("token", None)
     st.session_state.setdefault("user", None)
     st.session_state.setdefault("map_loaded", False)
+    st.session_state.setdefault("selected_date", None)
+    st.session_state.setdefault("selected_period", None)
 
 
 def inject_styles() -> None:
     st.markdown(
         """
         <style>
+        @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css');
         :root {
             --ink-strong: #10233f;
             --ink-base: #25415f;
@@ -64,10 +68,13 @@ def inject_styles() -> None:
             padding-bottom: 2rem;
         }
         h1, h2, h3, h4, p, label, div, span {
-            color: var(--ink-strong);
+            color: var(--ink-strong) !important;
         }
         .stCaptionContainer, .stMarkdown p, .stText, .st-emotion-cache-10trblm {
-            color: var(--ink-base);
+            color: var(--ink-base) !important;
+        }
+        .glass-card *, .hero-shell * {
+            color: var(--ink-strong) !important;
         }
         section[data-testid="stSidebar"] {
             background: linear-gradient(180deg, rgba(14, 30, 51, 0.82), rgba(25, 52, 84, 0.74));
@@ -120,13 +127,14 @@ def inject_styles() -> None:
             line-height: 1.08;
             margin: 0 0 0.55rem 0;
             font-weight: 800;
-            color: var(--ink-strong);
+            color: var(--ink-strong) !important;
+            text-shadow: 0 8px 24px rgba(255, 255, 255, 0.3);
         }
         .hero-copy {
             margin: 0;
             font-size: 1rem;
             line-height: 1.7;
-            color: var(--ink-base);
+            color: var(--ink-base) !important;
         }
         .glass-card {
             background: var(--glass-bg);
@@ -167,14 +175,26 @@ def inject_styles() -> None:
         }
         .panel-title {
             margin: 0 0 0.4rem 0;
-            color: var(--ink-strong);
+            color: var(--ink-strong) !important;
             font-size: 1.1rem;
             font-weight: 700;
         }
         .panel-copy {
             margin: 0;
-            color: var(--ink-base);
+            color: var(--ink-base) !important;
             line-height: 1.65;
+        }
+        .icon-badge {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 14px;
+            margin-bottom: 0.7rem;
+            background: linear-gradient(135deg, rgba(28,163,199,0.2), rgba(34,199,138,0.16));
+            color: var(--accent-cyan) !important;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
         }
         .legend-wrap {
             display: flex;
@@ -191,6 +211,30 @@ def inject_styles() -> None:
             background: rgba(255,255,255,0.78);
             border: 1px solid rgba(255,255,255,0.82);
             box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        }
+        .legend-chip i {
+            margin-right: 0.4rem;
+        }
+        .legend-detail {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+        .legend-card {
+            background: rgba(255,255,255,0.52);
+            border: 1px solid rgba(255,255,255,0.72);
+            border-radius: 18px;
+            padding: 0.9rem 1rem;
+        }
+        .legend-card strong {
+            display: block;
+            margin-bottom: 0.2rem;
+            color: var(--ink-strong) !important;
+        }
+        .legend-card span {
+            font-size: 0.88rem;
+            color: var(--ink-base) !important;
         }
         .toolbar-card {
             background: linear-gradient(180deg, rgba(255,255,255,0.56), rgba(255,255,255,0.38));
@@ -217,12 +261,101 @@ def inject_styles() -> None:
             padding: 0.4rem;
             box-shadow: var(--glass-shadow);
         }
+        .map-note {
+            margin-top: 0.8rem;
+            color: var(--ink-base) !important;
+            font-size: 0.9rem;
+        }
+        .map-shell {
+            position: relative;
+        }
+        .floating-legend {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            z-index: 20;
+            width: 240px;
+            background: rgba(255,255,255,0.68);
+            border: 1px solid rgba(255,255,255,0.78);
+            box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
+            backdrop-filter: blur(16px);
+            border-radius: 22px;
+            padding: 1rem;
+        }
+        .floating-legend-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: var(--ink-strong) !important;
+            margin-bottom: 0.8rem;
+        }
+        .floating-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.5rem 0;
+        }
+        .floating-legend-icon {
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            color: #fff !important;
+            font-size: 0.95rem;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+        }
+        .floating-legend-text strong {
+            display: block;
+            color: var(--ink-strong) !important;
+            font-size: 0.9rem;
+            line-height: 1.2;
+        }
+        .floating-legend-text span {
+            display: block;
+            color: var(--ink-base) !important;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+        .timeline-card {
+            background: linear-gradient(135deg, rgba(12,143,184,0.08), rgba(30,201,138,0.08));
+        }
+        .timeline-strip {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            margin-top: 0.6rem;
+        }
+        .timeline-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.48rem 0.8rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.76);
+            border: 1px solid rgba(255,255,255,0.82);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+            color: var(--ink-strong) !important;
+            font-weight: 700;
+        }
         @media (max-width: 768px) {
             .hero-title {
                 font-size: 1.7rem;
             }
             .stats-grid {
                 grid-template-columns: 1fr;
+            }
+            .legend-detail {
+                grid-template-columns: 1fr;
+            }
+            .floating-legend {
+                position: static;
+                width: 100%;
+                margin-bottom: 0.9rem;
             }
         }
         </style>
@@ -323,9 +456,13 @@ def fetch_map_data(forecast_date: str, time_period: str) -> list[dict]:
         return []
 
 
-def render_map(map_rows: list[dict], active: bool) -> None:
+def render_map(map_rows: list[dict], active: bool, host=st) -> None:
     if active and map_rows:
         dataframe = pd.DataFrame(map_rows)
+        dataframe["label_text"] = dataframe.apply(
+            lambda row: f"{row['region_name']}\n{row['forecast_label']}",
+            axis=1,
+        )
     else:
         fallback_regions = api_request("GET", "/regions").json()
         dataframe = pd.DataFrame(fallback_regions)
@@ -333,6 +470,7 @@ def render_map(map_rows: list[dict], active: bool) -> None:
         dataframe["color_rgba"] = [[180, 190, 200, 120]] * len(dataframe)
         dataframe["forecast_label"] = "대기중"
         dataframe["precipitation_probability"] = 0
+        dataframe["label_text"] = dataframe["region_name"]
 
     layer = pdk.Layer(
         "ScatterplotLayer",
@@ -345,6 +483,19 @@ def render_map(map_rows: list[dict], active: bool) -> None:
         stroked=True,
         get_line_color=[255, 255, 255, 180],
         line_width_min_pixels=2,
+    )
+    text_layer = pdk.Layer(
+        "TextLayer",
+        data=dataframe,
+        get_position="[longitude, latitude]",
+        get_text="label_text",
+        get_size=15,
+        get_color=[16, 35, 63, 230],
+        get_angle=0,
+        get_text_anchor="'middle'",
+        get_alignment_baseline="'bottom'",
+        get_pixel_offset=[0, -34],
+        pickable=False,
     )
 
     tooltip = {
@@ -364,10 +515,73 @@ def render_map(map_rows: list[dict], active: bool) -> None:
             zoom=6.4,
             pitch=0,
         ),
-        layers=[layer],
+        layers=[layer, text_layer],
         tooltip=tooltip,
     )
-    st.pydeck_chart(deck, use_container_width=True)
+    host.markdown(
+        """
+        <div class="map-shell">
+            <div class="floating-legend">
+                <div class="floating-legend-title">
+                    <i class="fas fa-layer-group"></i>
+                    지도 날씨 범례
+                </div>
+                <div class="floating-legend-item">
+                    <div class="floating-legend-icon" style="background:#2ecc71;"><i class="fas fa-sun"></i></div>
+                    <div class="floating-legend-text">
+                        <strong>맑음</strong>
+                        <span>초록 점 + 태양 아이콘</span>
+                    </div>
+                </div>
+                <div class="floating-legend-item">
+                    <div class="floating-legend-icon" style="background:#f1c40f;"><i class="fas fa-cloud-sun"></i></div>
+                    <div class="floating-legend-text">
+                        <strong>구름많음</strong>
+                        <span>노랑 점 + 해와 구름 아이콘</span>
+                    </div>
+                </div>
+                <div class="floating-legend-item">
+                    <div class="floating-legend-icon" style="background:#7f8c8d;"><i class="fas fa-cloud"></i></div>
+                    <div class="floating-legend-text">
+                        <strong>흐림</strong>
+                        <span>회색 점 + 구름 아이콘</span>
+                    </div>
+                </div>
+                <div class="floating-legend-item">
+                    <div class="floating-legend-icon" style="background:#3498db;"><i class="fas fa-cloud-rain"></i></div>
+                    <div class="floating-legend-text">
+                        <strong>흐리고 비</strong>
+                        <span>파랑 점 + 비구름 아이콘</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    host.pydeck_chart(deck, use_container_width=True)
+    host.markdown(
+        '<div class="map-note"><i class="fas fa-location-dot"></i> 표 대신 지도 위에 지역명과 예보가 직접 오버레이됩니다. 마우스를 올리면 강수확률까지 확인할 수 있습니다.</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_timeline_status(current_date: str, current_period: str, host=st) -> None:
+    host.markdown(
+        f"""
+        <div class="glass-card timeline-card">
+            <div class="icon-badge"><i class="fas fa-film"></i></div>
+            <div class="panel-title">Forecast Timeline</div>
+            <p class="panel-copy">모든 날짜의 예보를 순차적으로 재생할 수 있습니다. 현재 프레임은 아래와 같습니다.</p>
+            <div class="timeline-strip">
+                <div class="timeline-pill"><i class="fas fa-calendar-day"></i>{current_date}</div>
+                <div class="timeline-pill"><i class="fas fa-clock"></i>{current_period}</div>
+                <div class="timeline-pill"><i class="fas fa-play-circle"></i>순차 재생 준비</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_main() -> None:
@@ -382,11 +596,16 @@ def render_main() -> None:
 
     selected_date_preview = available_dates[0]
     selected_period_preview = available_periods[0]
+    if st.session_state.selected_date is None:
+        st.session_state.selected_date = selected_date_preview
+    if st.session_state.selected_period is None:
+        st.session_state.selected_period = selected_period_preview
 
     st.markdown(
         f"""
         <div class="hero-shell">
             <div class="hero-kicker">Mid-term Forecast Intelligence</div>
+            <div class="icon-badge"><i class="fas fa-cloud-sun-rain"></i></div>
             <h1 class="hero-title">중기예보를 지도로 읽는<br/>깔끔한 Forecast Studio</h1>
             <p class="hero-copy">
                 SQLite에 적재된 예보 데이터를 FastAPI와 Streamlit으로 연결했습니다.
@@ -402,6 +621,7 @@ def render_main() -> None:
         st.markdown(
             """
             <div class="glass-card">
+                <div class="icon-badge"><i class="fas fa-map-location-dot"></i></div>
                 <div class="panel-title">전국 예보 맵</div>
                 <p class="panel-copy">메인 지도는 한국 주요 권역 중심 좌표를 기준으로 구성되어 있습니다. 버튼을 누르면 지역별 중기예보가 즉시 색상으로 반영됩니다.</p>
             </div>
@@ -416,22 +636,22 @@ def render_main() -> None:
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-label">Backend</div>
-                        <div class="stat-value">API Ready</div>
+                        <div class="stat-value"><i class="fas fa-server"></i> API Ready</div>
                         <div class="stat-meta">{backend_base_url}</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Latest Batch</div>
-                        <div class="stat-value">{options['latest_batch_id']}</div>
+                        <div class="stat-value"><i class="fas fa-database"></i> {options['latest_batch_id']}</div>
                         <div class="stat-meta">가장 최근 적재 예보</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Date Range</div>
-                        <div class="stat-value">{len(available_dates)}일</div>
+                        <div class="stat-value"><i class="fas fa-calendar-days"></i> {len(available_dates)}일</div>
                         <div class="stat-meta">{available_dates[0]} 시작</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Default View</div>
-                        <div class="stat-value">{selected_date_preview}</div>
+                        <div class="stat-value"><i class="fas fa-clock"></i> {selected_date_preview}</div>
                         <div class="stat-meta">{selected_period_preview} 기준</div>
                     </div>
                 </div>
@@ -440,68 +660,101 @@ def render_main() -> None:
             unsafe_allow_html=True,
         )
 
-    selector_col, button_col = st.columns([1.2, 1.2])
+    selector_col, button_col = st.columns([1.25, 1.15])
     with selector_col:
         st.markdown('<div class="glass-card toolbar-card">', unsafe_allow_html=True)
-        selected_date = st.selectbox("예보 날짜", available_dates, index=0)
+        default_date_index = available_dates.index(st.session_state.selected_date)
+        selected_date = st.selectbox("예보 날짜", available_dates, index=default_date_index)
         selected_period = st.segmented_control(
             "시간대",
             options=available_periods,
-            default=available_periods[0] if available_periods else None,
+            default=st.session_state.selected_period,
         )
+        playback_speed = st.slider("재생 속도 (초)", min_value=0.3, max_value=1.5, value=0.7, step=0.1)
         st.markdown("</div>", unsafe_allow_html=True)
     with button_col:
         st.markdown(
             """
             <div class="glass-card toolbar-card">
+                <div class="icon-badge"><i class="fas fa-sliders"></i></div>
                 <div class="panel-title">레이어 컨트롤</div>
                 <p class="panel-copy">예보 오버레이를 켜면 권역별 상태가 색상으로 나타납니다.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("지도에 예보 색상 표시", use_container_width=True, type="primary"):
+        show_map = st.button("지도에 예보 색상 표시", use_container_width=True, type="primary")
+        autoplay = st.button("전체 날짜 순차 재생", use_container_width=True)
+        if show_map:
             st.session_state.map_loaded = True
+            st.session_state.selected_date = selected_date
+            st.session_state.selected_period = selected_period
 
-    map_rows: list[dict] = []
-    if st.session_state.map_loaded and selected_date and selected_period:
-        map_rows = fetch_map_data(selected_date, selected_period)
+    timeline_placeholder = st.empty()
+    map_placeholder = st.empty()
 
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    render_map(map_rows, st.session_state.map_loaded)
-    st.markdown("</div>", unsafe_allow_html=True)
+    current_date = st.session_state.selected_date or selected_date
+    current_period = st.session_state.selected_period or selected_period
+    render_timeline_status(current_date, current_period, timeline_placeholder)
+
+    if autoplay:
+        st.session_state.map_loaded = True
+        frames = [(frame_date, frame_period) for frame_date in available_dates for frame_period in available_periods]
+        for frame_date, frame_period in frames:
+            st.session_state.selected_date = frame_date
+            st.session_state.selected_period = frame_period
+            map_rows = fetch_map_data(frame_date, frame_period)
+            render_timeline_status(frame_date, frame_period, timeline_placeholder)
+            with map_placeholder.container():
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                render_map(map_rows, True)
+                st.markdown("</div>", unsafe_allow_html=True)
+            time.sleep(playback_speed)
+    else:
+        map_rows: list[dict] = []
+        current_date = st.session_state.selected_date or selected_date
+        current_period = st.session_state.selected_period or selected_period
+        if st.session_state.map_loaded and current_date and current_period:
+            map_rows = fetch_map_data(current_date, current_period)
+
+        with map_placeholder.container():
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            render_map(map_rows, st.session_state.map_loaded)
+            st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown(
         """
         <div class="glass-card">
+            <div class="icon-badge"><i class="fas fa-palette"></i></div>
             <div class="panel-title">Forecast Palette</div>
             <div class="legend-wrap">
-                <div class="legend-chip" style="background:#2ecc7133;">맑음</div>
-                <div class="legend-chip" style="background:#f1c40f33;">구름많음</div>
-                <div class="legend-chip" style="background:#7f8c8d33;">흐림</div>
-                <div class="legend-chip" style="background:#3498db33;">흐리고 비</div>
+                <div class="legend-chip" style="background:#2ecc7133;"><i class="fas fa-sun"></i>맑음</div>
+                <div class="legend-chip" style="background:#f1c40f33;"><i class="fas fa-cloud-sun"></i>구름많음</div>
+                <div class="legend-chip" style="background:#7f8c8d33;"><i class="fas fa-cloud"></i>흐림</div>
+                <div class="legend-chip" style="background:#3498db33;"><i class="fas fa-cloud-rain"></i>흐리고 비</div>
+            </div>
+            <div class="legend-detail">
+                <div class="legend-card">
+                    <strong><i class="fas fa-sun"></i> 맑음</strong>
+                    <span>초록 계열 점으로 표시되며 비교적 안정적인 날씨를 의미합니다.</span>
+                </div>
+                <div class="legend-card">
+                    <strong><i class="fas fa-cloud-sun"></i> 구름많음</strong>
+                    <span>노랑 계열 점으로 보이며 구름이 많은 상태를 빠르게 구분할 수 있습니다.</span>
+                </div>
+                <div class="legend-card">
+                    <strong><i class="fas fa-cloud"></i> 흐림</strong>
+                    <span>회색 계열 점으로 표시되어 흐린 날씨 권역을 한 번에 확인할 수 있습니다.</span>
+                </div>
+                <div class="legend-card">
+                    <strong><i class="fas fa-cloud-rain"></i> 흐리고 비</strong>
+                    <span>파랑 계열 점으로 표시되며 강수 가능성이 높은 예보를 의미합니다.</span>
+                </div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    if map_rows:
-        st.markdown(
-            """
-            <div class="glass-card">
-                <div class="panel-title">Forecast Table</div>
-                <p class="panel-copy">현재 선택한 날짜와 시간대의 지역별 예보를 표로 확인할 수 있습니다.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        dataframe = pd.DataFrame(map_rows)[
-            ["region_name", "forecast_date", "time_period", "forecast_label", "precipitation_probability"]
-        ]
-        dataframe.columns = ["지역", "날짜", "시간대", "예보", "강수확률(%)"]
-        st.dataframe(dataframe, use_container_width=True, hide_index=True)
-
 
 init_state()
 inject_styles()
