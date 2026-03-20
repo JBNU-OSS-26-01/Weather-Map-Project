@@ -1,0 +1,16 @@
+[project]
+name = "weather-map-project"
+version = "0.1.0"
+description = "Public weather forecast map app with Streamlit, FastAPI, and SQLite3."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "pandas>=2.2.0",
+    "requests>=2.32.0",
+    "streamlit>=1.43.0",
+    "uvicorn>=0.34.0",
+]
+
+[tool.uv]
+package = false
