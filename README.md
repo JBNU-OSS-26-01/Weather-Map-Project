@@ -17,6 +17,14 @@ uv run uvicorn backend.main:app --reload
 uv run streamlit run frontend/app.py
 ```
 
+## Main Features
+
+- CSV to SQLite initial import
+- JWT register/login
+- Forecast CRUD API
+- Streamlit map dashboard with color-based forecast overlay
+- Docker compose for frontend and backend
+
 ## Docker
 
 ```bash
